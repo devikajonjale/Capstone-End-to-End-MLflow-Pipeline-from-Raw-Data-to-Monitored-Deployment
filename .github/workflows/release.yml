@@ -1,0 +1,22 @@
+name: Release Pipeline
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Build Docker image
+      run: |
+        docker build -t my-mlops-app:${{ github.sha }} .
+        
+    - name: Tag and Push (Simulated)
+      run: |
+        docker tag my-mlops-app:${{ github.sha }} my-mlops-app:latest
+        echo "Simulating push to registry..."
+        # docker push myregistry/my-mlops-app:latest

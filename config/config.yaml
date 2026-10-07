@@ -1,0 +1,101 @@
+project:
+  name: house_price_prediction
+  version: 1.0.0
+
+data:
+  raw_train_path: datasets/project4_capstone/capstone_house_prices_train.csv
+  incoming_batches_path: datasets/project4_capstone/capstone_incoming_batches.csv
+  processed_dir: data/processed
+  results_dir: data/results
+
+feature_engineering:
+  target: Price_Lakhs
+  id_cols:
+    - House_ID
+    - Batch
+  numeric_features:
+    - Area_sqft
+    - Bedrooms
+    - Bathrooms
+    - Age_Years
+    - Distance_to_Center_km
+    - Neighborhood_Score
+    - Has_Parking
+  categorical_features:
+    - Property_Condition
+    - City_Zone
+  imputation:
+    strategy_numeric: median
+    strategy_categorical: most_frequent
+  
+model:
+  model_type: random_forest
+  random_state: 42
+  hyperparameters:
+    n_estimators: 200
+    max_depth: 15
+    min_samples_split: 5
+    min_samples_leaf: 2
+
+data_gate:
+  # Allow up to 10% missing values per column
+  max_missing_pct: 0.10
+  required_columns:
+    - House_ID
+    - Area_sqft
+    - Bedrooms
+    - Bathrooms
+    - Age_Years
+    - Distance_to_Center_km
+    - Neighborhood_Score
+    - Has_Parking
+    - Property_Condition
+    - City_Zone
+  value_ranges:
+    Area_sqft:
+      min: 100
+      max: 5000
+    Bedrooms:
+      min: 1
+      max: 10
+    Bathrooms:
+      min: 1
+      max: 10
+    Age_Years:
+      min: 0
+      max: 150
+    Distance_to_Center_km:
+      min: 0.0
+      max: 100.0
+    Neighborhood_Score:
+      min: 1.0
+      max: 10.0
+    Has_Parking:
+      min: 0
+      max: 1
+
+model_gate:
+  # Maximum acceptable RMSE based on business requirements
+  max_rmse: 18.0
+  # Maximum acceptable MAE based on business requirements
+  max_mae: 13.0
+  # Minimum acceptable R2 based on business requirements
+  min_r2: 0.65
+  # Required improvement over current best model to promote
+  improvement_threshold: 0.02
+
+monitoring:
+  # Maximum acceptable drift score for a feature
+  drift_threshold: 0.05
+  alert_conditions:
+    - drift_score > 0.05
+    - data_quality_score < 0.90
+
+mlflow:
+  experiment_name: house_price_prediction
+  tracking_uri: mlruns
+  model_name: house_price_model
+
+serving:
+  host: 0.0.0.0
+  port: 8000
