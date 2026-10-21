@@ -1,22 +1,36 @@
-name: Release Pipeline
+name: Release
 
+# A merge to main builds a deployable image tagged with the commit SHA and
+# publishes a GitHub Release with the image tarball attached, so any running
+# container can be linked back to its commit and an older build can be rolled
+# back to. See ROLLBACK.md.
 on:
   push:
-    branches: [ main ]
+    branches: [main]
+
+permissions:
+  contents: write
 
 jobs:
   release:
     runs-on: ubuntu-latest
-    
     steps:
-    - uses: actions/checkout@v3
-    
-    - name: Build Docker image
-      run: |
-        docker build -t my-mlops-app:${{ github.sha }} .
-        
-    - name: Tag and Push (Simulated)
-      run: |
-        docker tag my-mlops-app:${{ github.sha }} my-mlops-app:latest
-        echo "Simulating push to registry..."
-        # docker push myregistry/my-mlops-app:latest
+      - uses: actions/checkout@v4
+
+      - name: Build image tagged with the commit
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          docker build \
+            -t house-price-api:${SHORT_SHA} \
+            -t house-price-api:latest \
+            --build-arg GIT_COMMIT=${{ github.sha }} .
+          docker save house-price-api:${SHORT_SHA} -o house-price-api-${SHORT_SHA}.tar
+          echo "SHORT_SHA=${SHORT_SHA}" >> "$GITHUB_ENV"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ env.SHORT_SHA }}
+          name: Build ${{ env.SHORT_SHA }}
+          generate_release_notes: true
+          files: house-price-api-${{ env.SHORT_SHA }}.tar

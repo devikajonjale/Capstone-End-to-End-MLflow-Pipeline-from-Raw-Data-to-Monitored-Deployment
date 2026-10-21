@@ -1,84 +1,100 @@
+"""FastAPI serving layer for the production model.
+
+Loads the self-contained pipeline from the committed production folder, adds
+the derived features and scores a single listing. Operational metrics are
+exposed at /metrics for Prometheus: request count, errors, latency and the
+distribution of predicted prices.
+"""
+import json
 import os
-import joblib
+import pickle
+import time
+
 import pandas as pd
-import mlflow
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from typing import Dict, Any, List
 from prometheus_client import Counter, Histogram, make_asgi_app
+from pydantic import BaseModel
 
 from src.config_loader import load_config
+from src.features import prepare_frame
 
-app = FastAPI(title="Real Estate Price Prediction API")
+app = FastAPI(title="House Price Prediction API", version="1.0.0")
 
-# Prometheus Metrics
-REQUEST_COUNT = Counter('prediction_requests_total', 'Total number of prediction requests')
-LATENCY = Histogram('prediction_latency_seconds', 'Latency of prediction requests')
-PREDICTION_VALUE = Histogram('prediction_value', 'Predicted house prices')
+REQUESTS = Counter("prediction_requests_total", "Total prediction requests")
+ERRORS = Counter("prediction_errors_total", "Total prediction errors")
+LATENCY = Histogram("prediction_latency_seconds", "Prediction latency in seconds")
+PRICE = Histogram(
+    "predicted_price_lakhs", "Distribution of predicted prices in lakhs",
+    buckets=[20, 40, 60, 80, 100, 120, 150, 200],
+)
 
-# Add prometheus asgi middleware
-metrics_app = make_asgi_app()
-app.mount("/metrics", metrics_app)
+app.mount("/metrics", make_asgi_app())
 
-# Globals
-model = None
-preprocessor = None
-config = None
+STATE: dict = {"model": None, "config": None, "lineage": {}}
 
-class HouseFeatures(BaseModel):
-    features: Dict[str, Any]
+
+class Listing(BaseModel):
+    Area_sqft: float
+    Bedrooms: int
+    Bathrooms: int
+    Age_Years: float
+    Distance_to_Center_km: float
+    Neighborhood_Score: float
+    Has_Parking: int
+    Property_Condition: str
+    City_Zone: str
+
+
+def _config_path() -> str:
+    env = os.environ.get("CONFIG_PATH")
+    if env:
+        return env
+    root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    candidate = os.path.join(root, "config", "config.yaml")
+    return candidate if os.path.exists(candidate) else "config/config.yaml"
+
 
 @app.on_event("startup")
-def load_assets():
-    global model, preprocessor, config
-    config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config', 'config.yaml')
-    if os.path.exists(config_path):
-        config = load_config(config_path)
-    else:
-        config = load_config('config/config.yaml')
-    
-    # Load Preprocessor
-    preprocessor_path = os.path.join('artifacts', 'features', 'preprocessor.pkl')
-    if os.path.exists(preprocessor_path):
-        preprocessor = joblib.load(preprocessor_path)
-    else:
-        print(f"Warning: Preprocessor not found at {preprocessor_path}")
+def load_assets() -> None:
+    config = load_config(_config_path())
+    STATE["config"] = config
+    prod_dir = config["registry"]["production_dir"]
+    model_path = os.path.join(prod_dir, "model.pkl")
+    if os.path.exists(model_path):
+        with open(model_path, "rb") as f:
+            STATE["model"] = pickle.load(f)
+    lineage_path = os.path.join(prod_dir, "lineage.json")
+    if os.path.exists(lineage_path):
+        with open(lineage_path) as f:
+            STATE["lineage"] = json.load(f)
 
-    # Load Model
-    model_name = config.get('mlflow', {}).get('model_name', 'HousePriceModel') if config else 'HousePriceModel'
-    try:
-        model_uri = f"models:/{model_name}/Production"
-        model = mlflow.sklearn.load_model(model_uri)
-    except Exception as e:
-        print(f"Failed to load model from MLflow: {e}. Trying local fallback.")
-        local_model_path = os.path.join('artifacts', 'models', 'model.pkl')
-        if os.path.exists(local_model_path):
-            model = joblib.load(local_model_path)
-        else:
-            print("Failed to load local model as well.")
 
 @app.get("/health")
-def health_check():
-    return {"status": "ok", "model_loaded": model is not None, "preprocessor_loaded": preprocessor is not None}
+def health() -> dict:
+    return {"status": "ok", "model_loaded": STATE["model"] is not None}
+
+
+@app.get("/lineage")
+def lineage() -> dict:
+    """Expose the deployed model's lineage for the Task 5 demonstration."""
+    return STATE["lineage"]
+
 
 @app.post("/predict")
-@LATENCY.time()
-def predict(data: HouseFeatures):
-    REQUEST_COUNT.inc()
-    if model is None:
-        raise HTTPException(status_code=503, detail="Model is not loaded")
-    
+def predict(listing: Listing) -> dict:
+    REQUESTS.inc()
+    if STATE["model"] is None:
+        ERRORS.inc()
+        raise HTTPException(status_code=503, detail="Model not loaded")
+    start = time.perf_counter()
     try:
-        df = pd.DataFrame([data.features])
-        
-        if preprocessor is not None:
-            processed_data = preprocessor.transform(df)
-        else:
-            processed_data = df
-
-        prediction = model.predict(processed_data)[0]
-        PREDICTION_VALUE.observe(prediction)
-        
-        return {"prediction": float(prediction)}
+        df = pd.DataFrame([listing.model_dump()])
+        X = prepare_frame(df, STATE["config"])
+        value = float(STATE["model"].predict(X)[0])
+        PRICE.observe(value)
+        return {"predicted_price_lakhs": round(value, 2)}
     except Exception as e:
+        ERRORS.inc()
         raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        LATENCY.observe(time.perf_counter() - start)
