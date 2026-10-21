@@ -33,15 +33,17 @@ coverage.xml
 mlruns/
 mlflow.db
 
-# DVC
-/data/*
-!/data/*.dvc
-/datasets/*
-!/datasets/*.dvc
+# Generated pipeline data (kept out of git; results are the exception below)
+/data/processed/
+/data/incoming/
+!/data/results/
 
 # Artifacts and logs
 artifacts/
 *.log
+
+# Local handoff bundle (not part of the repo)
+*.bundle
 
 # IDEs
 .idea/

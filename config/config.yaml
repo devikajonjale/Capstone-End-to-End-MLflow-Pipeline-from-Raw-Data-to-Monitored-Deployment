@@ -1,3 +1,7 @@
+# Single source of truth for the house price pipeline.
+# Nothing in the code should hard-code a path, threshold or hyperparameter.
+# Every value below is read through src/config_loader.py and validated on load.
+
 project:
   name: house_price_prediction
   version: 1.0.0
@@ -27,9 +31,10 @@ feature_engineering:
   imputation:
     strategy_numeric: median
     strategy_categorical: most_frequent
-  
+
 model:
   model_type: random_forest
+  test_size: 0.2
   random_state: 42
   hyperparameters:
     n_estimators: 200
@@ -37,9 +42,10 @@ model:
     min_samples_split: 5
     min_samples_leaf: 2
 
+# DATA GATE. A batch that breaks any of these rules is rejected and the
+# production model keeps serving unchanged.
 data_gate:
-  # Allow up to 10% missing values per column
-  max_missing_pct: 0.10
+  max_missing_pct: 0.10          # at most 10 percent missing per column
   required_columns:
     - House_ID
     - Area_sqft
@@ -52,49 +58,46 @@ data_gate:
     - Property_Condition
     - City_Zone
   value_ranges:
-    Area_sqft:
-      min: 100
-      max: 5000
-    Bedrooms:
-      min: 1
-      max: 10
-    Bathrooms:
-      min: 1
-      max: 10
-    Age_Years:
-      min: 0
-      max: 150
-    Distance_to_Center_km:
-      min: 0.0
-      max: 100.0
-    Neighborhood_Score:
-      min: 1.0
-      max: 10.0
-    Has_Parking:
-      min: 0
-      max: 1
+    Area_sqft: {min: 100, max: 5000}
+    Bedrooms: {min: 1, max: 10}
+    Bathrooms: {min: 1, max: 10}
+    Age_Years: {min: 0, max: 150}
+    Distance_to_Center_km: {min: 0.0, max: 100.0}
+    Neighborhood_Score: {min: 1.0, max: 10.0}
+    Has_Parking: {min: 0, max: 1}
 
+# MODEL GATE. A freshly trained model is promoted only when it clears the
+# absolute quality bar AND is at least as good as the model already in
+# production (within a small tolerance).
 model_gate:
-  # Maximum acceptable RMSE based on business requirements
   max_rmse: 18.0
-  # Maximum acceptable MAE based on business requirements
   max_mae: 13.0
-  # Minimum acceptable R2 based on business requirements
   min_r2: 0.65
-  # Required improvement over current best model to promote
-  improvement_threshold: 0.02
+  # a new model may be at most this much worse (in RMSE) than production
+  # and still be allowed through. A value of 0.5 means "no worse by more
+  # than 0.5 lakhs". Set below zero to force a strict improvement.
+  rmse_tolerance: 0.5
 
+# MONITORING. Drift is measured with the Population Stability Index (PSI).
+# PSI below 0.1 is stable, 0.1 to 0.2 is a moderate shift worth watching,
+# and above 0.2 is a material shift that raises an alert.
 monitoring:
-  # Maximum acceptable drift score for a feature
-  drift_threshold: 0.05
-  alert_conditions:
-    - drift_score > 0.05
-    - data_quality_score < 0.90
+  psi_warn: 0.10
+  psi_alert: 0.20
+  # performance alert: raise if batch RMSE is worse than training RMSE by
+  # more than this factor (1.25 means 25 percent worse).
+  performance_alert_ratio: 1.25
+  bins: 10
 
 mlflow:
   experiment_name: house_price_prediction
-  tracking_uri: mlruns
+  tracking_uri: sqlite:///mlflow.db
   model_name: house_price_model
+
+# Where the promoted model and its lineage record are written. This folder
+# is committed so the serving container is self-contained.
+registry:
+  production_dir: models/production
 
 serving:
   host: 0.0.0.0

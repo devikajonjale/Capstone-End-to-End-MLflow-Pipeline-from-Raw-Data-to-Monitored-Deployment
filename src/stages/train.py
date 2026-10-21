@@ -1,59 +1,92 @@
-import os
+"""Stage 4: train.
+
+Builds a single scikit-learn Pipeline that carries preprocessing and the
+RandomForest together, so the saved artifact can score raw listings directly.
+Every run is logged to MLflow with its parameters, metrics and the data
+version, which is what makes the lineage in Task 5 work.
+"""
+import hashlib
 import logging
-import pickle
+from typing import Tuple
+
 import mlflow
-from prefect import task
-from sklearn.model_selection import train_test_split
+import mlflow.sklearn
+import pandas as pd
+from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-from src.config_loader import load_config
+from sklearn.impute import SimpleImputer
+from sklearn.metrics import mean_absolute_error, r2_score, root_mean_squared_error
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+
+from src.features import model_input_columns
 
 logger = logging.getLogger(__name__)
 
-@task
-def train_model(X, y, config_path='config/config.yaml'):
-    """Train RandomForest, log to MLflow, and save model."""
-    config = load_config(config_path)
-    model_config = config.get('model', {})
-    mlflow_config = config.get('mlflow', {})
-    
-    test_size = model_config.get('test_size', 0.2)
-    random_state = model_config.get('random_state', 42)
-    
-    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=test_size, random_state=random_state)
-    
-    params = model_config.get('params', {
-        'n_estimators': 100,
-        'max_depth': None,
-        'min_samples_split': 2,
-        'random_state': random_state
-    })
-    
-    mlflow.set_tracking_uri(mlflow_config.get('tracking_uri', 'sqlite:///mlflow.db'))
-    mlflow.set_experiment(mlflow_config.get('experiment_name', 'capstone_experiment'))
-    
+
+def build_estimator(config: dict) -> Pipeline:
+    """Assemble the preprocessing plus RandomForest pipeline from config."""
+    cols = model_input_columns(config)
+    imp = config["feature_engineering"]["imputation"]
+
+    numeric = Pipeline([
+        ("impute", SimpleImputer(strategy=imp["strategy_numeric"])),
+        ("scale", StandardScaler()),
+    ])
+    categorical = Pipeline([
+        ("impute", SimpleImputer(strategy=imp["strategy_categorical"])),
+        ("onehot", OneHotEncoder(handle_unknown="ignore")),
+    ])
+    pre = ColumnTransformer([
+        ("num", numeric, cols["numeric"]),
+        ("cat", categorical, cols["categorical"]),
+    ])
+
+    m = config["model"]
+    rf = RandomForestRegressor(random_state=m["random_state"], **m["hyperparameters"])
+    return Pipeline([("pre", pre), ("model", rf)])
+
+
+def _data_version(X: pd.DataFrame, y: pd.Series) -> str:
+    """A short content hash of the training data, recorded for lineage."""
+    h = hashlib.sha256()
+    h.update(pd.util.hash_pandas_object(X, index=True).values.tobytes())
+    h.update(pd.util.hash_pandas_object(y, index=True).values.tobytes())
+    return h.hexdigest()[:12]
+
+
+def train_model(X: pd.DataFrame, y: pd.Series, config: dict) -> Tuple[Pipeline, dict, str]:
+    m = config["model"]
+    X_tr, X_val, y_tr, y_val = train_test_split(
+        X, y, test_size=m["test_size"], random_state=m["random_state"]
+    )
+
+    mlflow.set_tracking_uri(config["mlflow"]["tracking_uri"])
+    mlflow.set_experiment(config["mlflow"]["experiment_name"])
+
     with mlflow.start_run() as run:
-        logger.info(f"Training RandomForestRegressor with params: {params}")
-        model = RandomForestRegressor(**params)
-        model.fit(X_train, y_train)
-        
-        y_pred = model.predict(X_val)
-        rmse = mean_squared_error(y_val, y_pred, squared=False)
-        mae = mean_absolute_error(y_val, y_pred)
-        r2 = r2_score(y_val, y_pred)
-        
-        metrics = {'rmse': rmse, 'mae': mae, 'r2': r2}
-        logger.info(f"Validation metrics: {metrics}")
-        
-        mlflow.log_params(params)
+        pipe = build_estimator(config)
+        logger.info("Training %s", m["model_type"])
+        pipe.fit(X_tr, y_tr)
+
+        pred = pipe.predict(X_val)
+        metrics = {
+            "rmse": float(root_mean_squared_error(y_val, pred)),
+            "mae": float(mean_absolute_error(y_val, pred)),
+            "r2": float(r2_score(y_val, pred)),
+        }
+        logger.info("Validation metrics: %s", metrics)
+
+        mlflow.log_params(m["hyperparameters"])
+        mlflow.log_param("model_type", m["model_type"])
+        mlflow.log_param("test_size", m["test_size"])
+        mlflow.log_param("data_version", _data_version(X, y))
+        mlflow.log_param("config_version", config["project"]["version"])
         mlflow.log_metrics(metrics)
-        mlflow.sklearn.log_model(model, "model")
-        
-        artifacts_dir = "artifacts/models"
-        os.makedirs(artifacts_dir, exist_ok=True)
-        model_path = os.path.join(artifacts_dir, "model.pkl")
-        with open(model_path, 'wb') as f:
-            pickle.dump(model, f)
-        logger.info(f"Saved model to {model_path}")
-        
-        return model, metrics, run.info.run_id
+        mlflow.sklearn.log_model(pipe, name="model", serialization_format="cloudpickle")
+
+        run_id = run.info.run_id
+        logger.info("Logged MLflow run %s", run_id)
+
+    return pipe, metrics, run_id

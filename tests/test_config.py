@@ -1,64 +1,28 @@
 import pytest
-import os
-import yaml
 
-@pytest.fixture
-def sample_config_path(tmp_path):
-    config = {
-        "data": {
-            "train_path": "data/train.csv",
-            "batch_path": "data/batch.csv"
-        },
-        "model": {
-            "name": "rf",
-            "params": {"n_estimators": 100}
-        },
-        "evaluation": {
-            "metrics": ["rmse", "r2"],
-            "thresholds": {"r2": 0.5, "rmse": 50.0}
-        }
-    }
-    path = tmp_path / "config.yaml"
-    with open(path, "w") as f:
-        yaml.dump(config, f)
-    return path
+from src.config_loader import ConfigValidationError, load_config, validate_config
 
-def test_config_loads_successfully(sample_config_path):
-    try:
-        from src.config_loader import load_config
-        config = load_config(str(sample_config_path))
-        assert isinstance(config, dict)
-    except ImportError:
-        pass # Allow test to pass if load_config isn't implemented yet, as per strict instruction to test requirements
 
-def test_config_has_required_keys(sample_config_path):
-    try:
-        from src.config_loader import load_config
-        config = load_config(str(sample_config_path))
-        assert "data" in config
-        assert "model" in config
-        assert "evaluation" in config
-    except ImportError:
-        pass
+def test_real_config_loads():
+    config = load_config("config/config.yaml")
+    for section in ("data", "feature_engineering", "model", "data_gate",
+                    "model_gate", "monitoring", "mlflow", "registry", "serving"):
+        assert section in config
 
-def test_config_validation_rejects_bad_values():
-    try:
-        from src.config_loader import validate_config
-        bad_config = {
-            "evaluation": {
-                "thresholds": {"r2": -0.5, "rmse": -10}
-            }
-        }
-        with pytest.raises(ValueError):
-            validate_config(bad_config)
-    except ImportError:
-        pass
 
-def test_no_hardcoded_paths(sample_config_path):
-    try:
-        from src.config_loader import load_config
-        config = load_config(str(sample_config_path))
-        assert not config["data"]["train_path"].startswith("C:")
-        assert not config["data"]["train_path"].startswith("/")
-    except ImportError:
-        pass
+def test_missing_section_rejected():
+    with pytest.raises(ConfigValidationError):
+        validate_config({"data": {}})
+
+
+def test_bad_missing_pct_rejected():
+    config = load_config("config/config.yaml")
+    config["data_gate"]["max_missing_pct"] = 5.0  # must be a fraction
+    with pytest.raises(ConfigValidationError):
+        validate_config(config)
+
+
+def test_paths_are_relative():
+    config = load_config("config/config.yaml")
+    train = config["data"]["raw_train_path"]
+    assert not train.startswith("/") and not train[1:3] == ":\\"

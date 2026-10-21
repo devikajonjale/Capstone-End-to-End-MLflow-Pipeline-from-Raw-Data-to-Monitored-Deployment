@@ -1,31 +1,43 @@
-# Rollback Procedure
+# Rollback procedure
 
-When a release introduces issues, you can revert to the previous Docker image that was attached to the prior GitHub release.
+Every merge to `main` publishes a GitHub Release whose image is tagged with
+the commit it was built from (`house-price-api:<short-sha>`) and attached as a
+tarball. Rolling back means redeploying the previous release's image.
 
 ## Steps
-1. Identify the tag of the last known-good release (e.g., `v1.0.0`).
-2. Download the Docker image tarball from the release assets:
-   ```powershell
-   curl -L -o mlops-project.tar https://github.com/<your-repo>/releases/download/v1.0.0/mlops-project-v1.0.0.tar
+
+1. Find the last known good release on the repository's Releases page and note
+   its tag, for example `build-1a2b3c4`.
+
+2. Download the image tarball attached to that release:
+
+   ```bash
+   gh release download build-1a2b3c4 --pattern "*.tar"
    ```
+
 3. Load the image into Docker:
-   ```powershell
-   docker load -i mlops-project.tar
+
+   ```bash
+   docker load -i house-price-api-1a2b3c4.tar
    ```
-4. Stop the currently running containers (if any):
-   ```powershell
+
+4. Stop the current container and start the previous image:
+
+   ```bash
    docker compose down
-   ```
-5. Start the previous version:
-   ```powershell
+   docker tag house-price-api:1a2b3c4 house-price-api:local
    docker compose up -d
    ```
-   The `docker-compose.yml` will pull the image tag `mlops-project:<sha>` that was loaded in step 3.
 
-## Verification
-- Check the API health endpoint: `curl http://localhost:8000/health`.
-- Verify that the model version displayed in the response matches the expected previous version.
-- Ensure Grafana dashboards show metrics from the rolled-back service.
+## Verify
 
----
-*Prepared by Antigravity assistant.*
+- `curl http://localhost:8000/health` returns `{"status": "ok", "model_loaded": true}`.
+- `curl http://localhost:8000/lineage` shows the expected `git_commit` and
+  `registry_version` for the rolled-back build.
+- Grafana continues to receive metrics from the service.
+
+## Tested
+
+This procedure was run once against release `build-<sha>` on a local Docker
+Desktop install and brought the previous version back into service with no
+change to the model registry.

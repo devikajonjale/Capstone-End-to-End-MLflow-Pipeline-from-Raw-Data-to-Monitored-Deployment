@@ -1,30 +1,39 @@
+"""Entry point for the training pipeline and single-batch runs.
+
+Examples:
+    python run_pipeline.py                     # full training and promotion
+    python run_pipeline.py --batch-number 3    # run one incoming batch
+    python run_pipeline.py --batch-file path.csv
+"""
 import argparse
-import sys
-import os
+import json
 
-from src.pipeline import run_pipeline
+import pandas as pd
 
-def main():
-    parser = argparse.ArgumentParser(description="Run House Price Pipeline")
-    parser.add_argument("--config", default="config/config.yaml", help="Path to config file")
-    parser.add_argument("--batch-file", default=None, help="Path to a specific batch file for inference")
-    parser.add_argument("--batch-number", type=int, default=None, help="Run a specific batch number (1, 2, or 3) sequentially if multiple")
-    
+from src.config_loader import load_config
+from src.pipeline import monitoring_flow, training_flow
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="House price MLOps pipeline")
+    parser.add_argument("--config", default="config/config.yaml")
+    parser.add_argument("--batch-file", default=None)
+    parser.add_argument("--batch-number", type=int, default=None, choices=[1, 2, 3])
     args = parser.parse_args()
-    
+
     if args.batch_number is not None:
-        batch_file = f"data/incoming/batch_{args.batch_number}.csv"
-        print(f"Running pipeline for batch {args.batch_number} at {batch_file}...")
-        summary = run_pipeline(config_path=args.config, batch_file=batch_file)
-        print(f"Summary for batch {args.batch_number}: {summary}")
+        config = load_config(args.config)
+        incoming = pd.read_csv(config["data"]["incoming_batches_path"])
+        batch_df = incoming[incoming["Batch"] == args.batch_number].copy()
+        result = monitoring_flow(batch_df, args.config, batch_label=f"batch_{args.batch_number}")
     elif args.batch_file is not None:
-        print(f"Running pipeline for batch file {args.batch_file}...")
-        summary = run_pipeline(config_path=args.config, batch_file=args.batch_file)
-        print(f"Summary for batch {args.batch_file}: {summary}")
+        batch_df = pd.read_csv(args.batch_file)
+        result = monitoring_flow(batch_df, args.config, batch_label=args.batch_file)
     else:
-        print("Running full training pipeline...")
-        summary = run_pipeline(config_path=args.config)
-        print(f"Summary for full training: {summary}")
+        result = training_flow(args.config)
+
+    print(json.dumps(result, indent=2, default=str))
+
 
 if __name__ == "__main__":
     main()

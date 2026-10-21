@@ -1,0 +1,83 @@
+[
+  {
+    "batch": "batch_1",
+    "n_rows": 500,
+    "psi": {
+      "Area_sqft": 0.021,
+      "Bedrooms": 0.0034,
+      "Bathrooms": 0.0011,
+      "Age_Years": 0.0106,
+      "Distance_to_Center_km": 0.0241,
+      "Neighborhood_Score": 0.0178,
+      "Has_Parking": 0.0,
+      "Property_Condition": 0.005,
+      "City_Zone": 0.0011
+    },
+    "drifted_features": [],
+    "watch_features": [],
+    "data_drift_alert": false,
+    "batch_rmse": 9.807,
+    "reference_rmse": 9.59,
+    "rmse_ratio": 1.023,
+    "performance_alert": false,
+    "alert": false,
+    "data_gate": "passed",
+    "status": "processed"
+  },
+  {
+    "batch": "batch_2",
+    "n_rows": 500,
+    "psi": {
+      "Area_sqft": 0.0763,
+      "Bedrooms": 0.0269,
+      "Bathrooms": 0.0243,
+      "Age_Years": 0.0149,
+      "Distance_to_Center_km": 0.0288,
+      "Neighborhood_Score": 0.0141,
+      "Has_Parking": 0.0,
+      "Property_Condition": 0.0179,
+      "City_Zone": 0.0274
+    },
+    "drifted_features": [],
+    "watch_features": [],
+    "data_drift_alert": false,
+    "batch_rmse": 11.256,
+    "reference_rmse": 9.59,
+    "rmse_ratio": 1.174,
+    "performance_alert": false,
+    "alert": false,
+    "data_gate": "passed",
+    "status": "processed"
+  },
+  {
+    "batch": "batch_3",
+    "n_rows": 500,
+    "psi": {
+      "Area_sqft": 0.318,
+      "Bedrooms": 0.2014,
+      "Bathrooms": 0.1042,
+      "Age_Years": 0.0059,
+      "Distance_to_Center_km": 0.0188,
+      "Neighborhood_Score": 0.0258,
+      "Has_Parking": 0.0,
+      "Property_Condition": 0.0194,
+      "City_Zone": 0.2058
+    },
+    "drifted_features": [
+      "Area_sqft",
+      "Bedrooms",
+      "City_Zone"
+    ],
+    "watch_features": [
+      "Bathrooms"
+    ],
+    "data_drift_alert": true,
+    "batch_rmse": 18.075,
+    "reference_rmse": 9.59,
+    "rmse_ratio": 1.885,
+    "performance_alert": true,
+    "alert": true,
+    "data_gate": "passed",
+    "status": "processed"
+  }
+]
