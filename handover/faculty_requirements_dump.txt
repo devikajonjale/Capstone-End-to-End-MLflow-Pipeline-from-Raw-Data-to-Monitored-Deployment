@@ -1,0 +1,236 @@
+[0] MLOps PROJECT BRIEF
+[1] Project 4
+[2] Capstone: End-to-End MLflow Pipeline from Raw Data to Monitored Deployment
+[3] One automated pipeline that takes data to a live, monitored model, and fails safely when something goes wrong.
+[4] Elective II: Machine Learning Operations (MLOps)
+[5] Syllabus topics: 1, 2, 7, 15  (integrating 4, 6, 10, 12, 13)
+[6] Prepared by
+[7] Dr. Santosh Kumar
+[8] 1. Project Overview
+[9] Scenario
+[10] A real-estate analytics start-up predicts asking prices (in ₹ lakhs) for property listings. New batches of listings arrive regularly, and today every retraining and release is done by hand, with no record of which data or code produced which model.
+[11] The start-up wants a fully automated pipeline: data in, features built, model trained and validated, registered, deployed and monitored. The pipeline must also stop cleanly, keeping the previous model in service, when data or model quality is not acceptable.
+[12] Your role
+[13] You are the lead MLOps engineer. You design the system, build it and present it to the founders.
+[14] Working mode
+[15] Work in pairs.
+[16] 2. Syllabus Topics Covered
+[17] Topic
+[18] Syllabus item
+[19] Where it appears in this project
+[20] 1
+[21] MLOps fundamentals & lifecycle
+[22] Task 1: problem framing and lifecycle map
+[23] 2
+[24] CI/CD pipeline for ML projects
+[25] Task 6: automated build and release
+[26] 7
+[27] Monitoring endpoint performance
+[28] Task 7: serving and monitoring
+[29] 15
+[30] End-to-end MLOps pipeline
+[31] Tasks 3–5: pipeline, gates, tracking and registry
+[32] 4, 10
+[33] Versioning and YAML configuration
+[34] Task 2: single-source configuration and versioned data
+[35] 6, 13
+[36] Deployment and orchestration
+[37] Tasks 3, 6 and 7
+[38] 12
+[39] Training and tuning
+[40] Task 3: training stage
+[41] 3. Tools & Environment
+[42] All tools below are free or open source. AWS services from the original syllabus are replaced as shown.
+[43] Purpose
+[44] Suggested free / open-source tool
+[45] Replaces (AWS)
+[46] Tracking & registry
+[47] MLflow
+[48] SageMaker Experiments / Registry
+[49] Orchestration
+[50] Prefect or ZenML
+[51] Step Functions / SageMaker Pipelines
+[52] Versioning
+[53] Git + GitHub; DVC
+[54] CodeCommit
+[55] CI/CD
+[56] GitHub Actions; pytest
+[57] CodePipeline / CodeDeploy
+[58] Packaging
+[59] Docker
+[60] —
+[61] Monitoring
+[62] Prometheus + Grafana; Evidently for data drift
+[63] CloudWatch / Model Monitor
+[64] Configuration
+[65] YAML with PyYAML
+[66] —
+[67] Note:  You may substitute an equivalent free tool if you can justify the choice in your report.
+[68] 4. Datasets Provided
+[69] The datasets are supplied with this brief. Do not generate or replace them unless a task explicitly says so.
+[70] File
+[71] Rows
+[72] Columns
+[73] Description
+[74] capstone_house_prices_train.csv
+[75] 4,000
+[76] 11
+[77] Historical listings with their prices. Use it to build and train the first model.
+[78] capstone_incoming_batches.csv
+[79] 1,500
+[80] 12
+[81] Three later batches of 500 listings each (Batch column = 1, 2, 3), including prices. Use them to simulate new data arriving in production.
+[82] Data dictionary (both files)
+[83] Column
+[84] Type
+[85] Description
+[86] House_ID
+[87] string
+[88] Unique listing identifier
+[89] Batch
+[90] int
+[91] Batch number (incoming file only)
+[92] Area_sqft
+[93] int
+[94] Built-up area in square feet
+[95] Bedrooms
+[96] int
+[97] Number of bedrooms
+[98] Bathrooms
+[99] int
+[100] Number of bathrooms
+[101] Age_Years
+[102] int
+[103] Age of the property in years
+[104] Distance_to_Center_km
+[105] float
+[106] Distance to the city centre in km
+[107] Neighborhood_Score
+[108] float
+[109] Neighbourhood quality score from 1 to 10
+[110] Has_Parking
+[111] int (0/1)
+[112] 1 = parking available
+[113] Property_Condition
+[114] category
+[115] Poor / Fair / Good / Excellent
+[116] City_Zone
+[117] category
+[118] North / South / East / West / Central
+[119] Price_Lakhs
+[120] float
+[121] TARGET: asking price in ₹ lakhs
+[122] Data notes
+[123] Age_Years, Neighborhood_Score and Distance_to_Center_km contain missing values.
+[124] The incoming batches are not guaranteed to resemble the training data. Finding out how they differ is part of the monitoring task.
+[125] House_ID and Batch are not predictive features.
+[126] You may use a dataset from Project 1 or Project 2 instead of the supplied one only with your instructor's written approval.
+[127] 5. Project Tasks
+[128] Each task states the outcome you must achieve and how it will be judged. How you achieve it is your design decision.
+[129] Task 1: Problem framing and lifecycle map   (Topic 1)
+[130] What you must achieve
+[131] Define the business objective, the success metrics (an error metric plus a plain-language interpretation for the founders) and the non-functional requirements such as prediction latency and how fresh the model must be.
+[132] Draw the system architecture and map it to the MLOps lifecycle.
+[133] Acceptance criteria
+[134] A design note of at most two pages with an architecture diagram.
+[135] Success thresholds are numeric and justified.
+[136] Every architecture component is traceable to a lifecycle stage.
+[137] Task 2: Configuration, code and data management   (Topics 4, 10)
+[138] What you must achieve
+[139] Make one YAML configuration the single source of truth for the pipeline, and put code, configuration and data under version control so any result can be reproduced.
+[140] Acceptance criteria
+[141] A fresh clone reproduces the reported metrics within a stated tolerance.
+[142] No paths, thresholds or hyperparameters are hard-coded.
+[143] Configurations are validated on load.
+[144] Task 3: Pipeline design   (Topics 13, 15)
+[145] What you must achieve
+[146] Implement the pipeline as an orchestrated workflow with separate stages: ingest, validate data, build features, train, evaluate, register, deploy and monitor.
+[147] Each stage must have defined inputs and outputs and must be re-runnable on its own.
+[148] Acceptance criteria
+[149] A diagram of the workflow graph is provided and matches the code.
+[150] Stage-level logs and a run history are available.
+[151] Any single stage can be re-run without repeating the whole pipeline.
+[152] Task 4: Validation gates and safe failure   (Topic 15)
+[153] What you must achieve
+[154] Add a data gate (for example schema, value ranges and a limit on missing values) and a model gate (a quality threshold plus a comparison against the current production model).
+[155] When a gate fails, the pipeline must stop cleanly with an explanatory message and the previous production model must keep serving.
+[156] Acceptance criteria
+[157] At least two failing scenarios are demonstrated: a bad data batch and a model below the threshold.
+[158] The production model and endpoint are unchanged after each failure.
+[159] Gate thresholds are configurable and justified.
+[160] Task 5: Tracking, registry and lineage   (Topic 15)
+[161] What you must achieve
+[162] Track every run, register models with stage transitions, and make lineage traceable: from a deployed model you must be able to find the code version, data version, configuration and run that produced it.
+[163] Acceptance criteria
+[164] A live lineage demonstration starting from the deployed model.
+[165] Stage transitions in the registry happen only through the pipeline.
+[166] Run records include data version and configuration.
+[167] Task 6: Automated build and release   (Topic 2)
+[168] What you must achieve
+[169] A pull request must trigger tests and a lightweight pipeline run. A merge to the main branch must build a deployable image and release the new version. Document how to roll back to the previous version.
+[170] Acceptance criteria
+[171] CI history shows a passing and a failing pull request and at least one release.
+[172] The image is tagged so that a running container can be linked to a commit.
+[173] The rollback procedure is written and tested once.
+[174] Task 7: Serving and monitoring   (Topics 6, 7)
+[175] What you must achieve
+[176] Serve the production model as a containerised API with operational metrics: latency, throughput, errors and the distribution of predicted prices.
+[177] Process the incoming batches to measure data drift and, because prices are supplied, performance drift. Define alert conditions and show which batches trigger them.
+[178] Acceptance criteria
+[179] A dashboard or report shows operational metrics and drift over the three batches.
+[180] Alert thresholds are justified, and the batches that trigger them are identified with evidence.
+[181] You explain what the pipeline should do when an alert fires.
+[182] Task 8: Final demonstration   (Topics 1, 2, 7, 15)
+[183] What you must achieve
+[184] Present the full loop live or as a recording: a code change, the CI run, the pipeline run, deployment and the monitoring update, followed by one failure scenario.
+[185] Acceptance criteria
+[186] The demonstration lasts 5 to 10 minutes.
+[187] Every team member explains a part of the system.
+[188] The failure scenario shows safe behaviour.
+[189] 6. Deliverables
+[190] One repository with the pipeline, configuration, tests, workflows, Dockerfile and README.
+[191] Design note (maximum two pages) with architecture diagram.
+[192] Workflow graph, run history and registry screenshots.
+[193] Evidence of two failing-gate scenarios.
+[194] Lineage demonstration (recorded or live).
+[195] CI history including at least one release.
+[196] Monitoring dashboard or report covering the three incoming batches.
+[197] A 5–10 minute demonstration.
+[198] A short reflection (one page) on what you would improve with more time.
+[199] 7. Rules & Constraints
+[200] Use only free tools and free-tier resources.
+[201] Every stage must be automated. Manual copying of files between stages is not allowed.
+[202] Only the pipeline may change the production model.
+[203] Each team member must have commits in the repository; individual contributions are checked.
+[204] No secrets or credentials may be committed to the repository.
+[205] 8. Academic Integrity
+[206] This is a two-person project. Work submitted under your names must be work you and your partner did and can explain.
+[207] Do not copy another group's repository, code, configuration, dashboard, or report, in whole or in part. Two submissions that are substantially the same will both be investigated, regardless of which group worked first.
+[208] During the demonstration, both partners must be able to explain, modify live, and justify every part of the submission without reading from notes you did not write yourselves. An inability to do this is treated as evidence the work is not your own.
+[209] Reusing a prior year's submission, a public GitHub repository, or another course's project as a starting point is not allowed unless you cite it explicitly and your own contribution is clearly separated from it.
+[210] Violations are treated as an academic integrity case under your institute's policy, not simply as a grading deduction.
+[211] 9. Evaluation Rubric (100 marks)
+[212] Criterion
+[213] Marks
+[214] What is assessed
+[215] Problem framing & design
+[216] 10
+[217] Clear objective, metrics and architecture
+[218] Pipeline architecture & orchestration
+[219] 20
+[220] Separated, re-runnable stages; matches diagram
+[221] Gates & failure handling
+[222] 15
+[223] Both gates work; safe failure; previous model keeps serving
+[224] Tracking, registry & lineage
+[225] 15
+[226] Complete records; working lineage demonstration
+[227] CI/CD & release
+[228] 15
+[229] PR checks; release on merge; rollback documented
+[230] Deployment & monitoring
+[231] 20
+[232] Operational metrics, drift detection, justified alerts
+[233] Demonstration & documentation
+[234] 5
+[235] Complete, clear, team participation
