@@ -251,5 +251,5 @@ Batch 3 triggered the drift alert — demonstrating monitoring works correctly.
 - [x] Rollback test completed + note written
 - [x] Docker versions recorded: Docker 28.0.4 / Compose v2.34.0-desktop.1
 - [x] Code committed to `saachis-development`
-- [ ] PR opened to `main`
+- [x] PR opened to `main` (PR #2)
 - [x] Evidence documented in `SAACHI_EVIDENCE_RECORD.md`
