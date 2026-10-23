@@ -4,7 +4,7 @@
 
 project:
   name: house_price_prediction
-  version: 1.0.0
+  version: 1.1.0
 
 data:
   raw_train_path: datasets/project4_capstone/capstone_house_prices_train.csv
@@ -32,10 +32,33 @@ feature_engineering:
     strategy_numeric: median
     strategy_categorical: most_frequent
 
+# Multi-algorithm training. All candidates below are run under 5-fold
+# cross-validation, every run is logged to MLflow, and the one with the
+# lowest mean CV RMSE is selected as the champion. The model gate then
+# evaluates that champion against the incumbent production model.
 model:
-  model_type: random_forest
+  model_type: random_forest   # kept for backward compatibility (first candidate's name)
   test_size: 0.2
   random_state: 42
+  cv:
+    n_splits: 5
+  candidates:
+    - name: random_forest
+      hyperparameters:
+        n_estimators: 300
+        max_depth: 18
+        min_samples_split: 4
+        min_samples_leaf: 2
+    - name: gradient_boosting
+      hyperparameters:
+        n_estimators: 300
+        max_depth: 5
+        learning_rate: 0.05
+        subsample: 0.9
+    - name: ridge
+      hyperparameters:
+        alpha: 1.0
+  # Legacy hyperparameters key, used only if `candidates` is missing.
   hyperparameters:
     n_estimators: 200
     max_depth: 15
@@ -66,16 +89,14 @@ data_gate:
     Neighborhood_Score: {min: 1.0, max: 10.0}
     Has_Parking: {min: 0, max: 1}
 
-# MODEL GATE. A freshly trained model is promoted only when it clears the
-# absolute quality bar AND is at least as good as the model already in
-# production (within a small tolerance).
+# MODEL GATE. A freshly trained champion is promoted only when it clears the
+# absolute quality bar (RMSE, MAE, R2, MAPE) AND beats the incumbent model
+# within a small tolerance (Champion vs Challenger).
 model_gate:
-  max_rmse: 18.0
-  max_mae: 13.0
-  min_r2: 0.65
-  # a new model may be at most this much worse (in RMSE) than production
-  # and still be allowed through. A value of 0.5 means "no worse by more
-  # than 0.5 lakhs". Set below zero to force a strict improvement.
+  max_rmse: 12.0
+  max_mae: 8.5
+  min_r2: 0.80
+  max_mape: 0.20
   rmse_tolerance: 0.5
 
 # MONITORING. Drift is measured with the Population Stability Index (PSI).
@@ -84,8 +105,6 @@ model_gate:
 monitoring:
   psi_warn: 0.10
   psi_alert: 0.20
-  # performance alert: raise if batch RMSE is worse than training RMSE by
-  # more than this factor (1.25 means 25 percent worse).
   performance_alert_ratio: 1.25
   bins: 10
 
@@ -94,11 +113,14 @@ mlflow:
   tracking_uri: sqlite:///mlflow.db
   model_name: house_price_model
 
-# Where the promoted model and its lineage record are written. This folder
-# is committed so the serving container is self-contained.
+# Where the promoted model and its lineage record are written.
 registry:
   production_dir: models/production
 
 serving:
   host: 0.0.0.0
   port: 8000
+  # Confidence interval reported alongside each prediction. For a RandomForest
+  # champion the width is derived from the standard deviation of per-tree
+  # predictions; other models fall back to the training RMSE as a prior.
+  confidence_z: 1.96

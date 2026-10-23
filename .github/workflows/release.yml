@@ -1,12 +1,17 @@
 name: Release
 
-# A merge to main builds a deployable image tagged with the commit SHA and
-# publishes a GitHub Release with the image tarball attached, so any running
-# container can be linked back to its commit and an older build can be rolled
-# back to. See ROLLBACK.md.
+# Triggers on either:
+#   - a push to main (per-commit build release), or
+#   - a semver tag push like v1.0.0 (named release with the tag)
+# A tag push creates a named release ("Release v1.0.0") and attaches the
+# image tarball; a commit push creates a build-tagged release linked to the
+# commit, so any running container can be traced back to its commit. See
+# ROLLBACK.md for the rollback procedure that consumes these artifacts.
 on:
   push:
     branches: [main]
+    tags:
+      - 'v*.*.*'
 
 permissions:
   contents: write
@@ -17,20 +22,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build image tagged with the commit
+      - name: Compute release labels
+        id: labels
         run: |
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+            RELEASE_TAG="${VERSION}"
+            RELEASE_NAME="Release ${VERSION}"
+          else
+            VERSION="${SHORT_SHA}"
+            RELEASE_TAG="build-${SHORT_SHA}"
+            RELEASE_NAME="Build ${SHORT_SHA}"
+          fi
+          echo "SHORT_SHA=${SHORT_SHA}" >> "$GITHUB_ENV"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=${RELEASE_TAG}" >> "$GITHUB_ENV"
+          echo "RELEASE_NAME=${RELEASE_NAME}" >> "$GITHUB_ENV"
+
+      - name: Build image tagged with the commit and version
+        run: |
           docker build \
+            -t house-price-api:${VERSION} \
             -t house-price-api:${SHORT_SHA} \
             -t house-price-api:latest \
             --build-arg GIT_COMMIT=${{ github.sha }} .
-          docker save house-price-api:${SHORT_SHA} -o house-price-api-${SHORT_SHA}.tar
-          echo "SHORT_SHA=${SHORT_SHA}" >> "$GITHUB_ENV"
+          docker save house-price-api:${VERSION} -o house-price-api-${VERSION}.tar
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: build-${{ env.SHORT_SHA }}
-          name: Build ${{ env.SHORT_SHA }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_NAME }}
           generate_release_notes: true
-          files: house-price-api-${{ env.SHORT_SHA }}.tar
+          files: house-price-api-${{ env.VERSION }}.tar

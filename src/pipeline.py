@@ -68,10 +68,15 @@ def training_flow(config_path: str = "config/config.yaml") -> Dict[str, Any]:
     model, train_metrics, run_id = train_task(X_train, y_train, config)
     summary["stage_reached"] = "train"
     summary["run_id"] = run_id
+    summary["champion_algorithm"] = train_metrics.get("champion_algorithm")
 
     metrics, passed = evaluate_task(model, X_test, y_test, config, run_id)
+    # Carry the champion name from training into the register stage so the
+    # lineage record names the algorithm actually serving.
+    metrics["champion_algorithm"] = train_metrics.get("champion_algorithm")
     summary["stage_reached"] = "model_gate"
-    summary["holdout_metrics"] = {k: metrics[k] for k in ("rmse", "mae", "r2")}
+    summary["holdout_metrics"] = {k: metrics[k] for k in ("rmse", "mae", "r2", "mape")
+                                   if k in metrics}
     summary["model_gate"] = "passed" if passed else "failed"
 
     if not passed:
